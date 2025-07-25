@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamFlow - Gestión de Clientes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-shadow {
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .animate-fadeIn {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .whatsapp-btn {
+            background: linear-gradient(135deg, #25D366, #128C7E);
+            transition: all 0.3s ease;
+        }
+        .whatsapp-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(37, 211, 102, 0.4);
+        }
+        .urgent-card {
+            border-left: 4px solid #ef4444;
+        }
+        .warning-card {
+            border-left: 4px solid #f59e0b;
+        }
+        .safe-card {
+            border-left: 4px solid #10b981;
+        }
+        .timeline-container {
+            width: 100%;
+            height: 8px;
+            background-color: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+        .timeline-bar {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        .timeline-red {
+            background: linear-gradient(90deg, #ef4444, #dc2626);
+        }
+        .timeline-yellow {
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+        }
+        .timeline-green {
+            background: linear-gradient(90deg, #10b981, #059669);
+        }
+        .clients-scroll {
+            max-height: 600px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #c7d2fe transparent;
+        }
+        .clients-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
+        .clients-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        .clients-scroll::-webkit-scrollbar-thumb {
+            background: #c7d2fe;
+            border-radius: 4px;
+        }
+        .clients-scroll::-webkit-scrollbar-thumb:hover {
+            background: #a5b4fc;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="gradient-bg text-white p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold flex items-center">
+                <i class="fas fa-film mr-2"></i>
+                StreamFlow Manager
+            </h1>
+            <div class="flex space-x-2">
+                <input type="file" id="excelFile" accept=".xlsx,.xls" onchange="importFromExcel(event)" class="hidden">
+                <button onclick="document.getElementById('excelFile').click()" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition">
+                    <i class="fas fa-file-import mr-2"></i>Importar Excel
+                </button>
+                <button onclick="exportToExcel()" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition">
+                    <i class="fas fa-file-excel mr-2"></i>Exportar Excel
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="container mx-auto p-4 max-w-7xl">
+        <!-- Dashboard Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white p-6 rounded-lg card-shadow">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Total Ganancias</p>
+                        <p class="text-2xl font-bold text-green-600" id="totalEarnings">$0</p>
+                    </div>
+                    <div class="text-green-500 text-3xl">
+                        <i class="fas fa-dollar-sign"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white p-6 rounded-lg card-shadow">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Clientes Activos</p>
+                        <p class="text-2xl font-bold text-blue-600" id="activeClients">0</p>
+                    </div>
+                    <div class="text-blue-500 text-3xl">
+                        <i class="fas fa-users"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white p-6 rounded-lg card-shadow">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Próximos a Vencer</p>
+                        <p class="text-2xl font-bold text-red-600" id="expiringSoon">0</p>
+                    </div>
+                    <div class="text-red-500 text-3xl">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Client Button -->
+        <div class="mb-4">
+            <button onclick="showAddClientModal()" class="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition flex items-center">
+                <i class="fas fa-plus mr-2"></i>Agregar Cliente
+            </button>
+        </div>
+
+        <!-- Clients List -->
+        <div class="bg-white rounded-lg card-shadow overflow-hidden">
+            <div class="p-6 border-b">
+                <h2 class="text-xl font-bold">Lista de Clientes</h2>
+            </div>
+            <div id="clientsList" class="divide-y divide-gray-200 clients-scroll">
+                <!-- Clients will be dynamically added here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Client Modal -->
+    <div id="clientModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg w-full max-w-md">
+                <div class="p-6">
+                    <h3 class="text-lg font-bold mb-4" id="modalTitle">Agregar Cliente</h3>
+                    <form id="clientForm" onsubmit="saveClient(event)">
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2">Nombre</label>
+                            <input type="text" id="clientName" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2">WhatsApp</label>
+                            <input type="tel" id="clientPhone" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2">Fecha de Pago</label>
+                            <input type="date" id="paymentDate" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium mb-2">Pantallas Adicionales</label>
+                            <input type="number" id="extraScreens" min="0" value="0" class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        </div>
+                        <div class="flex justify-end space-x-2">
+                            <button type="button" onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancelar</button>
+                            <button type="submit" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">Guardar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg hidden">
+        <span id="toastMessage"></span>
+    </div>
+
+    <script>
+        // State management
+        let clients = JSON.parse(localStorage.getItem('streamflowClients')) || [];
+        let editingClientId = null;
+        let history = [];
+        const BASE_PRICE = 10000;
+        const EXTRA_PRICE = 5000;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            renderClients();
+            updateDashboard();
+            checkExpiringClients();
+            setInterval(checkExpiringClients, 86400000); // Check daily
+        });
+
+        // Show add client modal
+        function showAddClientModal() {
+            document.getElementById('modalTitle').textContent = 'Agregar Cliente';
+            document.getElementById('clientForm').reset();
+            editingClientId = null;
+            document.getElementById('paymentDate').valueAsDate = new Date();
+            document.getElementById('clientModal').classList.remove('hidden');
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('clientModal').classList.add('hidden');
+        }
+
+        // Save client
+        function saveClient(event) {
+            event.preventDefault();
+            
+            const client = {
+                id: editingClientId || Date.now(),
+                name: document.getElementById('clientName').value,
+                phone: document.getElementById('clientPhone').value,
+                paymentDate: document.getElementById('paymentDate').value,
+                extraScreens: parseInt(document.getElementById('extraScreens').value) || 0,
+                createdAt: new Date().toISOString()
+            };
+
+            if (editingClientId) {
+                const oldClient = clients.find(c => c.id === editingClientId);
+                history.push({ action: 'edit', client: oldClient, timestamp: new Date().toISOString() });
+                const index = clients.findIndex(c => c.id === editingClientId);
+                clients[index] = { ...oldClient, ...client };
+            } else {
+                clients.push(client);
+            }
+
+            localStorage.setItem('streamflowClients', JSON.stringify(clients));
+            renderClients();
+            updateDashboard();
+            closeModal();
+            showToast(editingClientId ? 'Cliente actualizado' : 'Cliente agregado');
+        }
+
+        // Edit client
+        function editClient(id) {
+            const client = clients.find(c => c.id === id);
+            if (!client) return;
+
+            document.getElementById('modalTitle').textContent = 'Editar Cliente';
+            document.getElementById('clientName').value = client.name;
+            document.getElementById('clientPhone').value = client.phone;
+            document.getElementById('paymentDate').value = client.paymentDate;
+            document.getElementById('extraScreens').value = client.extraScreens;
+            editingClientId = id;
+            document.getElementById('clientModal').classList.remove('hidden');
+        }
+
+        // Delete client
+        function deleteClient(id) {
+            if (confirm('¿Estás seguro de eliminar este cliente?')) {
+                const client = clients.find(c => c.id === id);
+                history.push({ action: 'delete', client, timestamp: new Date().toISOString() });
+                clients = clients.filter(c => c.id !== id);
+                localStorage.setItem('streamflowClients', JSON.stringify(clients));
+                renderClients();
+                updateDashboard();
+                showToast('Cliente eliminado');
+            }
+        }
+
+        // Undo last action
+        function undoLastAction() {
+            if (history.length === 0) {
+                showToast('No hay acciones para deshacer');
+                return;
+            }
+
+            const lastAction = history.pop();
+            if (lastAction.action === 'delete') {
+                clients.push(lastAction.client);
+            } else if (lastAction.action === 'edit') {
+                const index = clients.findIndex(c => c.id === lastAction.client.id);
+                if (index !== -1) clients[index] = lastAction.client;
+            }
+
+            localStorage.setItem('streamflowClients', JSON.stringify(clients));
+            renderClients();
+            updateDashboard();
+            showToast('Acción deshecha');
+        }
+
+        // Calculate days left
+        function getDaysLeft(paymentDate) {
+            const now = new Date();
+            const payment = new Date(paymentDate);
+            const nextPayment = new Date(payment.getFullYear(), payment.getMonth() + 1, payment.getDate());
+            const diffTime = nextPayment - now;
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        // Get status class based on days left
+        function getStatusClass(daysLeft) {
+            if (daysLeft <= 3) return 'urgent-card';
+            if (daysLeft <= 7) return 'warning-card';
+            return 'safe-card';
+        }
+
+        // Render clients
+        function renderClients() {
+            const container = document.getElementById('clientsList');
+            container.innerHTML = '';
+
+            // Sort by days left
+            const sortedClients = [...clients].sort((a, b) => {
+                return getDaysLeft(a.paymentDate) - getDaysLeft(b.paymentDate);
+            });
+
+            sortedClients.forEach(client => {
+                const daysLeft = getDaysLeft(client.paymentDate);
+                const totalPrice = BASE_PRICE + (client.extraScreens * EXTRA_PRICE);
+                const statusClass = getStatusClass(daysLeft);
+
+                const div = document.createElement('div');
+                div.className = `p-6 ${statusClass}`;
+                const timelinePercentage = Math.max(0, Math.min(100, ((30 - daysLeft) / 30) * 100));
+                const timelineClass = daysLeft <= 3 ? 'timeline-red' : daysLeft <= 7 ? 'timeline-yellow' : 'timeline-green';
+                
+                div.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <h3 class="text-lg font-semibold">${client.name}</h3>
+                            <p class="text-gray-600">${client.phone}</p>
+                            <p class="text-sm text-gray-500">${client.extraScreens} pantallas adicionales</p>
+                            <div class="timeline-container">
+                                <div class="timeline-bar ${timelineClass}" style="width: ${timelinePercentage}%"></div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-2xl font-bold text-purple-600">${totalPrice.toLocaleString()}</p>
+                            <p class="text-sm ${daysLeft <= 3 ? 'text-red-600 font-bold' : 'text-gray-600'}">
+                                ${daysLeft} días restantes
+                            </p>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex space-x-2">
+                        <button onclick="editClient(${client.id})" class="text-blue-600 hover:text-blue-800">
+                            <i class="fas fa-edit"></i> Editar
+                        </button>
+                        <button onclick="sendWhatsAppReminder(${client.id})" class="whatsapp-btn text-white px-3 py-1 rounded text-sm">
+                            <i class="fab fa-whatsapp mr-1"></i> Recordar
+                        </button>
+                        <button onclick="deleteClient(${client.id})" class="text-red-600 hover:text-red-800">
+                            <i class="fas fa-trash"></i> Eliminar
+                        </button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+
+            if (clients.length === 0) {
+                container.innerHTML = `
+                    <div class="p-12 text-center text-gray-500">
+                        <i class="fas fa-user-friends text-6xl mb-4"></i>
+                        <p>No hay clientes registrados</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Update dashboard
+        function updateDashboard() {
+            const totalEarnings = clients.reduce((sum, client) => {
+                return sum + BASE_PRICE + (client.extraScreens * EXTRA_PRICE);
+            }, 0);
+
+            const expiringSoon = clients.filter(client => getDaysLeft(client.paymentDate) <= 3).length;
+
+            document.getElementById('totalEarnings').textContent = `$${totalEarnings.toLocaleString()}`;
+            document.getElementById('activeClients').textContent = clients.length;
+            document.getElementById('expiringSoon').textContent = expiringSoon;
+        }
+
+        // Send WhatsApp reminder
+        function sendWhatsAppReminder(clientId) {
+            const client = clients.find(c => c.id === clientId);
+            if (!client) return;
+
+            const daysLeft = getDaysLeft(client.paymentDate);
+            const totalPrice = BASE_PRICE + (client.extraScreens * EXTRA_PRICE);
+            const message = `Hola ${client.name}, te recordamos que tu suscripción vence en ${daysLeft} días. Valor a pagar: $${totalPrice.toLocaleString()} COP. Gracias por confiar en StreamFlow!`;
+            const url = `https://wa.me/57${client.phone}?text=${encodeURIComponent(message)}`;
+            window.open(url, '_blank');
+        }
+
+        // Check expiring clients
+        function checkExpiringClients() {
+            const expiringClients = clients.filter(client => {
+                const daysLeft = getDaysLeft(client.paymentDate);
+                return daysLeft === 1;
+            });
+
+            expiringClients.forEach(client => {
+                showToast(`⚠️ Recordatorio: ${client.name} vence mañana`);
+            });
+        }
+
+        // Export to Excel
+        function exportToExcel() {
+            const data = clients.map(client => ({
+                Nombre: client.name,
+                WhatsApp: client.phone,
+                'Fecha de Pago': client.paymentDate,
+                'Pantallas Adicionales': client.extraScreens,
+                'Total a Pagar': BASE_PRICE + (client.extraScreens * EXTRA_PRICE),
+                'Días Restantes': getDaysLeft(client.paymentDate)
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Clientes");
+            XLSX.writeFile(wb, "clientes-streamflow.xlsx");
+        }
+
+        // Import from Excel
+        function importFromExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+                    let importedCount = 0;
+                    jsonData.forEach(row => {
+                        const client = {
+                            id: Date.now() + Math.random(),
+                            name: row['Nombre'] || row['name'],
+                            phone: String(row['WhatsApp'] || row['phone']).replace(/\D/g, ''),
+                            paymentDate: row['Fecha de Pago'] || row['paymentDate'],
+                            extraScreens: parseInt(row['Pantallas Adicionales'] || row['extraScreens'] || 0),
+                            createdAt: new Date().toISOString()
+                        };
+
+                        if (client.name && client.phone && client.paymentDate) {
+                            clients.push(client);
+                            importedCount++;
+                        }
+                    });
+
+                    localStorage.setItem('streamflowClients', JSON.stringify(clients));
+                    renderClients();
+                    updateDashboard();
+                    showToast(`${importedCount} clientes importados`);
+                } catch (error) {
+                    showToast('Error al importar archivo');
+                    console.error(error);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            event.target.value = '';
+        }
+
+        // Show toast
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const messageSpan = document.getElementById('toastMessage');
+            messageSpan.textContent = message;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 3000);
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'z') {
+                e.preventDefault();
+                undoLastAction();
+            }
+        });
+    </script>
+</body>
+</html>
